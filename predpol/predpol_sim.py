@@ -12,21 +12,6 @@ import numpy as np
 import copy
 
 
-# --- PRELIMINARIES --- #
-
-# Set up simulation options.
-options = {}
-options["drug_crimes_with_bins"] = "drug_crimes_with_bins.csv"	# path to input file
-options["global_start"] = pd.to_datetime("2010/07/01")			# simulation start date
-options["global_end"] = pd.to_datetime("2011/12/31")			# simulation end date
-options["observed"] = "predpol_drug_observed"					# path to "observed crimes" output file
-options["predictions"] = "predpol_drug_predictions"				# path to "predicted crimes" output file
-options["predpol_window"] = 180									# prediction window for PredPol
-options["begin_predpol"] = 0									# day to begin adding crimes due to increased policing
-options["add_crimes_logical"] = False							# add crimes due to increased policing?
-options["percent_increase"] = 0.0								# % increase in crimes due to increased policing (as a fraction)
-
-
 # --- PREDPOL CALCULATIONS --- #
 
 # TODO: clean up
@@ -227,7 +212,7 @@ def run_predpol_simulation(data, options):
 		pp_dict = prepare_data_for_predpol(data, start_date, end_date)
 
 		# Run PredPol calculations.
-		rates, o, omega, theta = pp.runEM(pp_dict, options["predpol_window"], end_date)
+		rates, o, omega, theta = runEM(pp_dict, options["predpol_window"], end_date)
 
 		# Save rates.
 		str_date = str(end_date).split(' ')[0]
@@ -249,3 +234,24 @@ def run_predpol_simulation(data, options):
 	# Write results.
 	results_rates.to_csv(options["predictions"])
 	results_num_crimes.to_csv(options["observed"])
+
+
+# --- CODE TO RUN THE SIMULATION --- #
+
+# Set up simulation options.
+options = {}
+options["drug_crimes_with_bins"] = "predpol/drug_crimes_with_bins.csv"	# path to input file
+options["global_start"] = pd.to_datetime("2010/07/01")					# simulation start date
+options["global_end"] = pd.to_datetime("2011/12/31")					# simulation end date
+options["observed"] = "predpol/predpol_drug_observed"					# path to "observed crimes" output file
+options["predictions"] = "predpol/predpol_drug_predictions"				# path to "predicted crimes" output file
+options["predpol_window"] = 180											# prediction window for PredPol
+options["begin_predpol"] = 0											# day to begin adding crimes due to increased policing
+options["add_crimes_logical"] = False									# add crimes due to increased policing?
+options["percent_increase"] = 0.0										# % increase in crimes due to increased policing (as a fraction)
+
+# Load data.
+data = load_predpol_data(options)
+
+# Run simulation.
+run_predpol_simulation(data, options)
