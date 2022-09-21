@@ -120,6 +120,8 @@ def runEM(data, T, pred_date, k=20,
 
     # todo(KL): everything else is a dict[n], shouldn't rates be a dict?
     rates = [lambdafun(data[n], mu[n], theta, omega) for n in data]
+	# Determine which bins to send police to.
+	# TODO: put this in a separate function, that can be customized
     sorted_keys = [key for (rate, key)
                    in sorted(zip(rates, data), reverse=True)]
     return rates, sorted_keys[0:k], omega, theta
@@ -170,8 +172,8 @@ def run_predpol_simulation(data, options):
 
 	# Adjust output filenames.
 	if options["add_crimes_logical"]:
-		options["predictions"] += '_add_' + str(int(options["percent_increase*100"])) + 'percent.csv'
-		options["observed"] += '_add_' + str(int(options["percent_increase*100"])) + 'percent.csv'
+		options["predictions"] += '_add_' + str(int(options["percent_increase"]*100)) + 'percent.csv'
+		options["observed"] += '_add_' + str(int(options["percent_increase"]*100)) + 'percent.csv'
 	else:
 		options["predictions"] += '.csv'
 		options["observed"] += '.csv'
@@ -212,7 +214,7 @@ def run_predpol_simulation(data, options):
 		pp_dict = prepare_data_for_predpol(data, start_date, end_date)
 
 		# Run PredPol calculations.
-		rates, o, omega, theta = runEM(pp_dict, options["predpol_window"], end_date)
+		rates, top_bins, omega, theta = runEM(pp_dict, options["predpol_window"], end_date)
 
 		# Save rates.
 		str_date = str(end_date).split(' ')[0]
@@ -221,7 +223,29 @@ def run_predpol_simulation(data, options):
 		results_rates.loc[keys, str_date] = rates
 
 		# Add crimes, if that's what we're doing.
-		# TODO
+		if options["add_crimes_logical"] and i >= options["begin_predpol"]:
+			# Get today's baseline crimes.
+			crime_today = pd.value_counts(data[data.DateTime==end_date].bin)
+			# Do any of the bins we will send police to have nonzero crimes today? (if not, skip)
+#			if not set(crime_today.index).isdisjoint(top_bins):
+			# Filter for the bins we will send police to.
+			crime_today_predicted = crime_today[[b for b in top_bins if b in crime_today.index]]
+#			crime_today_predicted = crime_today[set(top_bins).intersection(set(crime_today.index))]
+			crime_today_predicted[pd.isnull(crime_today_predicted)] = 0
+
+			# Generate new crimes randomly, with binomial distribution based on predicted rates.
+			add_crimes = np.random.binomial(list(crime_today_predicted + 1), options["percent_increase"])
+
+			# Create dataframe for new crimes (will be appended to existing data).
+			new_crimes = pd.DataFrame()
+			new_crimes['bin'] = np.repeat(list(crime_today_predicted.index), add_crimes)
+			new_crimes['DateTime'] = end_date
+			new_crimes['OCCURRED'] = end_date
+			new_crimes['LAG'] = 0
+			new_crimes.index = range(1 + max(data.index), 1 + max(data.index) + sum(add_crimes))
+#			data = data.append(new_crimes)
+			data = pd.concat([data, new_crimes])
+			print(f"  len(data) now = {len(data)}")
 
 		# Record total number of crimes on this day.
 		crime_today = pd.value_counts(data[data.DateTime==end_date].bin)
@@ -248,7 +272,7 @@ options["predictions"] = "predpol/predpol_drug_predictions"				# path to "predic
 options["predpol_window"] = 180											# prediction window for PredPol
 options["begin_predpol"] = 0											# day to begin adding crimes due to increased policing
 options["add_crimes_logical"] = False									# add crimes due to increased policing?
-options["percent_increase"] = 0.0										# % increase in crimes due to increased policing (as a fraction)
+options["percent_increase"] = 0.2										# % increase in crimes due to increased policing (as a fraction)
 
 # Load data.
 data = load_predpol_data(options)
