@@ -186,6 +186,9 @@ def plot_heatmaps(baseline_filepath, observed_filepath, flagged_filepath, output
 	sns.heatmap(flags_array, cmap='flare', ax=axes[2])
 	axes[2].title.set_text('# Times Flagged')
 
+	# Title.
+	fig.suptitle(f"(total crimes observed: {observed_df.sum().sum()})")
+
 	if output_pdf_filepath:
 		fig.savefig(output_pdf_filepath, bbox_inches='tight')
 
@@ -242,7 +245,7 @@ def plot_heatmaps_from_dataframes(baseline_df, observed_df, flagged_df, fig=None
 	sns.heatmap(flags_array, cmap='flare', ax=axes[2], cbar_ax=cbar_ax_flags)
 
 	# Title.
-	fig.suptitle(f"Iteration {observed_df.shape[1]}")
+	fig.suptitle(f"Iteration {observed_df.shape[1]} (total crimes observed: {observed_df.sum().sum()})")
 
 	# if show:
 	# 	plt.show()
@@ -509,6 +512,10 @@ def run_predpol_simulation2(crime_data_df, options):
 			new_crimes['LAG'] = 0
 			new_crimes.index = range(1 + max(crime_data_df.index), 1 + max(crime_data_df.index) + sum(addl_crimes))
 			crime_data_df = pd.concat([crime_data_df, new_crimes])
+
+			# Add new crimes to crime_today.
+			for k in range(len(new_crimes)):
+				crime_today.loc[[new_crimes.iloc[k]['bin']]] += 1
 
 		# Save today's data.
 		str_date = str(window_end).split(' ')[0]
