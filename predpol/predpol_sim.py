@@ -15,8 +15,6 @@ import seaborn as sns
 from tqdm import tqdm
 
 
-NUM_FLAGS = 20	# number of bins to flag per day
-NUM_COLS = 20	# number of columns in heatmap
 
 
 # --- PREDPOL CALCULATIONS --- #
@@ -143,7 +141,8 @@ def runEM(crime_data, T, pred_date, k=20,
 
 # --- PLOTTING --- #
 
-def plot_heatmaps(baseline_filepath, observed_filepath, flagged_filepath, output_pdf_filepath=None):
+def plot_heatmaps(baseline_filepath, observed_filepath, flagged_filepath, options, output_pdf_filepath=None):
+	"""Plot heatmaps. Based on the results of a completed PredPol run."""
 
 	# Read CSV files.
 	baseline_df = pd.read_csv(baseline_filepath)
@@ -162,18 +161,21 @@ def plot_heatmaps(baseline_filepath, observed_filepath, flagged_filepath, output
 	flags = flagged_df.sum(axis=1)
 	flags_array = np.array(list(flags))
 
-	# Add 0s so that size of arrays are multiples of NUM_COLS.
-	while len(baseline_crimes_array) % NUM_COLS != 0:
+	# Get shortcut to # of columns.
+	num_cols = options["heatmap_num_cols"]
+
+	# Add 0s so that size of arrays are multiples of num_cols.
+	while len(baseline_crimes_array) % num_cols != 0:
 		baseline_crimes_array = np.append(baseline_crimes_array, [0])
-	while len(observed_crimes_array) % NUM_COLS != 0:
+	while len(observed_crimes_array) % num_cols != 0:
 		observed_crimes_array = np.append(observed_crimes_array, [0])
-	while len(flags_array) % NUM_COLS != 0:
+	while len(flags_array) % num_cols != 0:
 		flags_array = np.append(flags_array, [0])
 
 	# Convert to 10-column numpy arrays.
-	baseline_crimes_array = baseline_crimes_array.reshape(-1, NUM_COLS)
-	observed_crimes_array = observed_crimes_array.reshape(-1, NUM_COLS)
-	flags_array = flags_array.reshape(-1, NUM_COLS)
+	baseline_crimes_array = baseline_crimes_array.reshape(-1, num_cols)
+	observed_crimes_array = observed_crimes_array.reshape(-1, num_cols)
+	flags_array = flags_array.reshape(-1, num_cols)
 
 	# Build heatmaps.
 	fig, axes = plt.subplots(1, 3)
@@ -195,7 +197,7 @@ def plot_heatmaps(baseline_filepath, observed_filepath, flagged_filepath, output
 	plt.show()
 
 
-def plot_heatmaps_from_dataframes(baseline_df, observed_df, flagged_df, fig=None):
+def plot_heatmaps_from_dataframes(baseline_df, observed_df, flagged_df, options, fig=None):
 
 	# Get # of crimes in each bin (baseline and observed).
 	baseline_crimes = pd.value_counts(baseline_df.bin)
@@ -209,18 +211,21 @@ def plot_heatmaps_from_dataframes(baseline_df, observed_df, flagged_df, fig=None
 	flags = flagged_df.sum(axis=1)
 	flags_array = np.array(list(flags))
 
-	# Add 0s so that size of arrays are multiples of NUM_COLS.
-	while len(baseline_crimes_array) % NUM_COLS != 0:
+	# Get shortcut to # of columns.
+	num_cols = options["heatmap_num_cols"]
+
+	# Add 0s so that size of arrays are multiples of num_cols.
+	while len(baseline_crimes_array) % num_cols != 0:
 		baseline_crimes_array = np.append(baseline_crimes_array, [0])
-	while len(observed_crimes_array) % NUM_COLS != 0:
+	while len(observed_crimes_array) % num_cols != 0:
 		observed_crimes_array = np.append(observed_crimes_array, [0])
-	while len(flags_array) % NUM_COLS != 0:
+	while len(flags_array) % num_cols != 0:
 		flags_array = np.append(flags_array, [0])
 
 	# Convert to 10-column numpy arrays.
-	baseline_crimes_array = baseline_crimes_array.reshape(-1, NUM_COLS)
-	observed_crimes_array = observed_crimes_array.reshape(-1, NUM_COLS)
-	flags_array = flags_array.reshape(-1, NUM_COLS)
+	baseline_crimes_array = baseline_crimes_array.reshape(-1, num_cols)
+	observed_crimes_array = observed_crimes_array.reshape(-1, num_cols)
+	flags_array = flags_array.reshape(-1, num_cols)
 
 	# Initialize.
 	first_iter = fig is None
@@ -322,147 +327,90 @@ def add_column_to_bin_dataframe(df, bins, values, str_date):
 	return df
 
 
-def run_predpol(crime_data_df, window_start, window_end, options):
+def add_new_crimes(crime_data_df, date, bins, pct_increase):
+	"""Add `pct_increase`% new crimes to the crime dataframe on `date` in each bin in `bins`.
+	If there are no crimes in a given bin on that date, no new crimes are added."""
+
+	# Get counts of crimes in each bin on the given day.
+	str_date = str(date).split(' ')[0]
+	crime_on_date = pd.value_counts(crime_data_df[crime_data_df.DateTime==str_date].bin)
+
+	# Filter for the desired bins.
+	crime_on_date_in_selected_bins = crime_on_date[[b for b in bins if b in crime_on_date.index]]
+	crime_on_date_in_selected_bins[pd.isnull(crime_on_date_in_selected_bins)] = 0
+
+	# Generate new crimes randomly, with binomial distribution based on observed crimes.
+	addl_crimes = np.random.binomial(list(crime_on_date_in_selected_bins + 1), pct_increase)
+
+	# Create dataframe for new crimes (will be appended to existing df).
+	# TODO: make this more compact
+	new_crimes = pd.DataFrame()
+	new_crimes['bin'] = np.repeat(list(crime_on_date_in_selected_bins.index), addl_crimes)
+	new_crimes['DateTime'] = date
+	new_crimes['OCCURRED'] = date
+	new_crimes['LAG'] = 0
+	new_crimes.index = range(1 + max(crime_data_df.index), 1 + max(crime_data_df.index) + sum(addl_crimes))
+	crime_data_df = pd.concat([crime_data_df, new_crimes])
+
+	return crime_data_df
+
+def do_predpol_calculations(crime_data_df, flagged_df, window_start, window_end, options):
+	"""Run PredPol algorithm. Return rates, as well as crime_data_df in case it
+	changed within this function."""
+
+	# ---
+	# Fairness idea: inflate yesterday's crime data in non-flagged bins by percent_increase.
+	# yesterday = window_end + pd.DateOffset(-1)
+	# str_yesterday = str(yesterday).split(' ')[0]
+	# if str_yesterday in flagged_df.columns:
+	# 	yesterdays_nonflagged_bins = [b for b in flagged_df.index if flagged_df[str_yesterday][b] == 0]
+	# 	crime_data_df = add_new_crimes(crime_data_df, yesterday, yesterdays_nonflagged_bins, options["percent_increase"])
+	# ---
+
 
 	# Prepare data for PredPol calculations.
 	pp_dict = prepare_data_for_predpol(crime_data_df, window_start, window_end)
 
 	# Run PredPol calculations.
-	rates, omega, theta = runEM(pp_dict, options["predpol_window"], window_end)
+	#rates, omega, theta = runEM(pp_dict, options["predpol_window"], window_end)
+	rates, _, _ = runEM(pp_dict, options["predpol_window"], window_end)
 
-	return rates, omega, theta
+	return rates, crime_data_df
 
 
-def choose_flagged_bins(rates, observed_crimes_df):
+def choose_flagged_bins(rates, observed_crimes_df, num_flags=20):
 	"""Choose which bins to flag, given the bins and their rates."""
 
 	# Sort rates.
 	sorted_bins = sorted(rates, key=lambda x: rates[x], reverse=True)
 	sorted_rates = [rates[b] for b in sorted_bins]
 
-	# Choose the NUM_FLAGS bins with the largest rates.
-	flagged_bins = sorted_bins[0:NUM_FLAGS]
+	# Choose the num_flags bins with the largest rates.
+	#flagged_bins = sorted_bins[0:num_flags]
+
+	# ---
+	# Fairness idea: choose bins randomly with probabilities determined by their rates.
+	prob = np.array(sorted_rates) / sum(np.array(sorted_rates))
+	flagged_bins = np.random.choice(sorted_bins, num_flags, p=prob)
+	# ---
 
 	return flagged_bins
 
 
-def run_predpol_simulation(crime_data, options):
-	"""Run the PredPol simulation."""
-
-	# Determine number of bins needed for dataframe.
-	max_bin = int(max(crime_data.bin))
-	print(f"max_bin = {max_bin}")
-
-	# Remove records that are not in the desired time window.
-	# TODO: don't we do this in prepare_data_for_predpol() too?
-	print(f"len(crime_data) = {len(crime_data)} before removing records by date")
-	crime_data = crime_data[(crime_data.DateTime >= options["global_start"]) & (crime_data.DateTime < options["global_end"])]
-	print(f"len(crime_data) = {len(crime_data)} after removing records by date")
-
-	# Determine number of predictions (= # days in crime_data minus predpol window).
-	num_predictions = (options["global_end"] - options["global_start"]).days - options["predpol_window"]
-
-	# Initialize results_rates dataframe (for PredPol predictions).
-	results_rates = pd.DataFrame()
-	results_rates['bin'] = range(1, max_bin + 1)
-	results_rates = results_rates.set_index(['bin'])
-
-	# Initialize results_num_crimes dataframe (for crimes observed).
-	results_num_crimes = pd.DataFrame()
-	results_num_crimes['bin'] = range(1, max_bin + 1)
-	results_num_crimes = results_num_crimes.set_index(['bin'])
-
-	# Main loop.
-	for i in range(num_predictions):
-
-		print(f"Simulating day {i}")
-
-		# Determine dates of PredPol window.
-		start_date = options["global_start"] + pd.DateOffset(i)
-		end_date = options["global_start"] + pd.DateOffset(i + options["predpol_window"])
-
-		# Prepare crime_data for PredPol.
-		pp_dict = prepare_data_for_predpol(crime_data, start_date, end_date)
-
-		# Run PredPol calculations.
-		rates, omega, theta = runEM(pp_dict, options["predpol_window"], end_date)
-#		rates, sorted_bins, sorted_rates, omega, theta = runEM(pp_dict, options["predpol_window"], end_date)
-
-		# Sort rates.
-		sorted_bins = sorted(rates, key=lambda x: rates[x], reverse=True)
-		sorted_rates = [rates[b] for b in sorted_bins]
-
-		# Choose which bins to send police to.
-		flagged_bins = choose_flagged_bins(sorted_bins, sorted_rates)
-
-		# Save rates.
-		str_date = str(end_date).split(' ')[0]
-		rates_series = pd.DataFrame(0, index=results_rates.index, columns=[str_date])
-		keys = list(pp_dict.keys())
-		rates_series.loc[keys, str_date] = rates
-		if results_rates.empty:
-			results_rates[str_date] = list(rates_series[str_date])
-		else:
-			results_rates = pd.concat([results_rates, rates_series], axis=1)
-		# results_rates[str_date] = 0
-		# keys = list(pp_dict.keys())
-		# results_rates.loc[keys, str_date] = rates
-
-		# Add crimes, if that's what we're doing.
-		if options["add_crimes_logical"] and i >= options["begin_predpol"]:
-			# Get today's baseline crimes.
-			crime_today = pd.value_counts(crime_data[crime_data.DateTime==end_date].bin)
-			# Filter for the bins we will send police to.
-			crime_today_predicted = crime_today[[b for b in flagged_bins if b in crime_today.index]]
-			crime_today_predicted[pd.isnull(crime_today_predicted)] = 0
-
-			# Generate new crimes randomly, with binomial distribution based on predicted rates.
-			add_crimes = np.random.binomial(list(crime_today_predicted + 1), options["percent_increase"])
-
-			# Create dataframe for new crimes (will be appended to existing crime_data).
-			new_crimes = pd.DataFrame()
-			new_crimes['bin'] = np.repeat(list(crime_today_predicted.index), add_crimes)
-			new_crimes['DateTime'] = end_date
-			new_crimes['OCCURRED'] = end_date
-			new_crimes['LAG'] = 0
-			new_crimes.index = range(1 + max(crime_data.index), 1 + max(crime_data.index) + sum(add_crimes))
-			crime_data = pd.concat([crime_data, new_crimes])
-			#print(f"  len(crime_data) now = {len(crime_data)}")
-
-		# Record total number of crimes on this day.
-		crime_today = pd.value_counts(crime_data[crime_data.DateTime==end_date].bin)
-		num_crimes_series = pd.DataFrame(0, index=results_num_crimes.index, columns=[str_date])
-		keys = list(pp_dict.keys())
-		num_crimes_series.loc[keys, str_date] = rates
-		if results_num_crimes.empty:
-			results_num_crimes[str_date] = num_crimes_series[str_date]
-		else:
-			results_num_crimes = pd.concat([results_num_crimes, num_crimes_series], axis=1)
-		# results_num_crimes[str_date] = 0
-		# results_num_crimes.loc[crime_today.index, str_date] = list(crime_today)
-
-		# Remove old crime_data to speed things up.
-		crime_data = crime_data[(crime_data.DateTime >= start_date)]
-
-	# Write results.
-	results_rates.to_csv(options["predictions"])
-	results_num_crimes.to_csv(options["observed"])
-
-
-def run_predpol_simulation2(crime_data_df, options):
+def run_predpol_simulation(crime_data_df, options):
 	"""Run the PredPol simulation."""
 
 	# Determine number of bins needed for dataframe.
 	max_bin = int(max(crime_data_df.bin))
 
 	# Remove data that are not in the desired time window.
-	crime_data_df = crime_data_df[(crime_data_df.DateTime >= options["global_start"]) & (crime_data_df.DateTime < options["global_end"])]
+	crime_data_df = crime_data_df[(crime_data_df.DateTime >= options["simulation_start"]) & (crime_data_df.DateTime < options["simulation_end"])]
 
 	# Make a copy to serve as basline (just for record-keeping).
 	baseline_crimes_df = crime_data_df.copy(deep=True) 
 
 	# Determine number of days to simulate.
-	num_days = (options["global_end"] - options["global_start"]).days - options["predpol_window"]
+	num_days = (options["simulation_end"] - options["simulation_start"]).days - options["predpol_window"]
 	
 	# Initialize dataframe for PredPol rates, observed crimes, and whether a bin was flagged.
 	predpol_rates_df = get_empty_bin_dataframe(max_bin)
@@ -482,41 +430,44 @@ def run_predpol_simulation2(crime_data_df, options):
 		pbar.update()
 
 		# Determine dates of PredPol window.
-		window_start = options["global_start"] + pd.DateOffset(i)
-		window_end = options["global_start"] + pd.DateOffset(i + options["predpol_window"])
+		window_start = options["simulation_start"] + pd.DateOffset(i)
+		window_end = options["simulation_start"] + pd.DateOffset(i + options["predpol_window"])
 
 		# Run PredPol.
-		rates, omega, theta = run_predpol(crime_data_df, window_start, window_end, options)
+		rates, crime_data_df = do_predpol_calculations(crime_data_df, flagged_df, window_start, window_end, options)
 
 		# Choose which bins to send police to.
-		flagged_bins = choose_flagged_bins(rates, observed_crimes_df)
-
-		# Get today's baseline crimes.
-		crime_today = pd.value_counts(crime_data_df[crime_data_df.DateTime==window_end].bin)
+		flagged_bins = choose_flagged_bins(rates, observed_crimes_df, options["num_flags"])
 
 		# Add crimes, if that's what we're doing.
 		if options["add_crimes_logical"] and i >= options["begin_predpol"]:
 
-			# Filter for the bins we will send police to.
-			crime_today_flagged_bins = crime_today[[b for b in flagged_bins if b in crime_today.index]]
-			crime_today_flagged_bins[pd.isnull(crime_today_flagged_bins)] = 0
+			# Add new crimes to model increased police presence.
+			crime_data_df = add_new_crimes(crime_data_df, window_end, flagged_bins, options["percent_increase"])
 
-			# Generate new crimes randomly, with binomial distribution based on PredPol rates.
-			addl_crimes = np.random.binomial(list(crime_today_flagged_bins + 1), options["percent_increase"])
+			# # Filter for the bins we will send police to.
+			# crime_today_flagged_bins = crime_today[[b for b in flagged_bins if b in crime_today.index]]
+			# crime_today_flagged_bins[pd.isnull(crime_today_flagged_bins)] = 0
 
-			# Create dataframe for new crimes (will be appended to existing df).
-			# TODO: make this more compact
-			new_crimes = pd.DataFrame()
-			new_crimes['bin'] = np.repeat(list(crime_today_flagged_bins.index), addl_crimes)
-			new_crimes['DateTime'] = window_end
-			new_crimes['OCCURRED'] = window_end
-			new_crimes['LAG'] = 0
-			new_crimes.index = range(1 + max(crime_data_df.index), 1 + max(crime_data_df.index) + sum(addl_crimes))
-			crime_data_df = pd.concat([crime_data_df, new_crimes])
+			# # Generate new crimes randomly, with binomial distribution based on observed crimes.
+			# addl_crimes = np.random.binomial(list(crime_today_flagged_bins + 1), options["percent_increase"])
+
+			# # Create dataframe for new crimes (will be appended to existing df).
+			# # TODO: make this more compact
+			# new_crimes = pd.DataFrame()
+			# new_crimes['bin'] = np.repeat(list(crime_today_flagged_bins.index), addl_crimes)
+			# new_crimes['DateTime'] = window_end
+			# new_crimes['OCCURRED'] = window_end
+			# new_crimes['LAG'] = 0
+			# new_crimes.index = range(1 + max(crime_data_df.index), 1 + max(crime_data_df.index) + sum(addl_crimes))
+			# crime_data_df = pd.concat([crime_data_df, new_crimes])
 
 			# Add new crimes to crime_today.
-			for k in range(len(new_crimes)):
-				crime_today.loc[[new_crimes.iloc[k]['bin']]] += 1
+			# for k in range(len(new_crimes)):
+			# 	crime_today.loc[[new_crimes.iloc[k]['bin']]] += 1
+
+		# Get today's baseline crimes.
+		crime_today = pd.value_counts(crime_data_df[crime_data_df.DateTime==window_end].bin)
 
 		# Save today's data.
 		str_date = str(window_end).split(' ')[0]
@@ -526,7 +477,7 @@ def run_predpol_simulation2(crime_data_df, options):
 
 		# Display heatmap.
 		if options["heatmap_display_interval"] > 0 and i % options["heatmap_display_interval"] == 0:
-			fig = plot_heatmaps_from_dataframes(baseline_crimes_df, observed_crimes_df, flagged_df, fig)
+			fig = plot_heatmaps_from_dataframes(baseline_crimes_df, observed_crimes_df, flagged_df, options, fig)
 
 		# Remove old data from crime_data_df to speed things up.
 		crime_data_df = crime_data_df[(crime_data_df.DateTime >= window_start)]
@@ -547,20 +498,22 @@ def set_options():
 	# Set up simulation options.
 	options = {}
 	options["drug_crimes_with_bins"] = "predpol/input/drug_crimes_with_bins.csv"	# path to input file
-	options["global_start"] = pd.to_datetime("2010/07/01")							# simulation start date
-#	options["global_end"] = pd.to_datetime("2010/12/31")							# simulation end date
-#	options["global_end"] = pd.to_datetime("2011/1/31")								# simulation end date
-	options["global_end"] = pd.to_datetime("2011/12/31")							# simulation end date
+	options["simulation_start"] = pd.to_datetime("2010/07/01")						# simulation start date
+#	options["simulation_end"] = pd.to_datetime("2010/12/31")						# simulation end date
+#	options["simulation_end"] = pd.to_datetime("2011/1/31")							# simulation end date
+	options["simulation_end"] = pd.to_datetime("2011/12/31")						# simulation end date
 	options["baseline_crime_filename"] = "predpol/output/predpol_drug_baseline"		# path to "baseline crimes" output file
 	options["observed_crime_filename"] = "predpol/output/predpol_drug_observed"		# path to "observed crimes" output file
 	options["rates_filename"] = "predpol/output/predpol_drug_rates"					# path to "rates" output file
 	options["flagged_filename"] = "predpol/output/predpol_flagged"					# path to "flagged" output file
+	options["num_flags"] = 20														# number of bins to flag each day
 	options["predpol_window"] = 180													# prediction window for PredPol
 	options["begin_predpol"] = 0													# day to begin adding crimes due to increased policing
-	options["add_crimes_logical"] = False											# add crimes due to increased policing?
+	options["add_crimes_logical"] = True											# add crimes due to increased policing?
 	options["percent_increase"] = 0.2												# % increase in crimes due to increased policing (as a fraction)
 	options["heatmap_display_interval"] = 0										# display heatmaps every this many iterations (if 0, don't display heatmaps until end)
 	options["heatmap_filename"] = "predpol/output/heatmap"							# path to save heatmap PDF
+	options["heatmap_num_cols"] = 20												# number of columns in heatmap
 
 	return options
 
@@ -580,7 +533,7 @@ def generate_odds_figure():
 	options["rates_filename"] = "predpol/output/temp_rates.csv"
 	options["flagged_filename"] = "predpol/output/temp_flagged.csv"
 	options["add_crimes_logical"] = False
-	run_predpol_simulation2(crime_data, options)
+	run_predpol_simulation(crime_data, options)
 
 	# Run with adding crimes.
 	options["baseline_crime_filename"] = "predpol/output/temp_baseline_add_20percent.csv"
@@ -588,7 +541,7 @@ def generate_odds_figure():
 	options["rates_filename"] = "predpol/output/temp_rates_add_20percent.csv"
 	options["flagged_filename"] = "predpol/output/temp_flagged_add_20percent.csv"
 	options["add_crimes_logical"] = True
-	run_predpol_simulation2(crime_data, options)
+	run_predpol_simulation(crime_data, options)
 
 	# Read CSV files.
 	rates_no_addl_df = pd.read_csv("predpol/output/temp_rates.csv")
@@ -628,7 +581,7 @@ def generate_odds_figure():
 	fig.savefig("figure3", bbox_inches='tight')
 
 
-def main(options):
+def main():
 
 	options = set_options()
 
@@ -651,17 +604,20 @@ def main(options):
 
 	# Run simulation.
 #	run_predpol_simulation(crime_data, options)
-	run_predpol_simulation2(crime_data, options)
+	run_predpol_simulation(crime_data, options)
 
 	# Draw plots.
 	plot_heatmaps(
 		baseline_filepath=options["baseline_crime_filename"],
 		observed_filepath=options["observed_crime_filename"],
 		flagged_filepath=options["flagged_filename"],
+		options=options,
 		output_pdf_filepath=options["heatmap_filename"]
 	)
 
 
 if __name__ == '__main__':
+	np.random.seed = 42
+	
 	main()
 #	generate_odds_figure()
