@@ -235,6 +235,7 @@ def plot_heatmaps_from_dataframes(baseline_df, observed_df, flagged_df, fig=None
 		axes = fig.axes
 
 	# Get cbar axes. (fig.axes contains 6 axes; first 3 are heatmaps and last 3 are colorbars.)
+	# (If we don't do this, new colorbar will be drawn at each iteration and take up new space.)
 	cbar_ax_baseline = None if first_iter else fig.axes[3]
 	cbar_ax_observed = None if first_iter else fig.axes[4]
 	cbar_ax_flags = None if first_iter else fig.axes[5]
@@ -542,7 +543,7 @@ def run_predpol_simulation2(crime_data_df, options):
 
 # --- CODE TO RUN THE SIMULATION --- #
 
-def main():
+def set_options():
 	# Set up simulation options.
 	options = {}
 	options["drug_crimes_with_bins"] = "predpol/input/drug_crimes_with_bins.csv"	# path to input file
@@ -556,10 +557,80 @@ def main():
 	options["flagged_filename"] = "predpol/output/predpol_flagged"					# path to "flagged" output file
 	options["predpol_window"] = 180													# prediction window for PredPol
 	options["begin_predpol"] = 0													# day to begin adding crimes due to increased policing
-	options["add_crimes_logical"] = True											# add crimes due to increased policing?
+	options["add_crimes_logical"] = False											# add crimes due to increased policing?
 	options["percent_increase"] = 0.2												# % increase in crimes due to increased policing (as a fraction)
 	options["heatmap_display_interval"] = 0										# display heatmaps every this many iterations (if 0, don't display heatmaps until end)
 	options["heatmap_filename"] = "predpol/output/heatmap"							# path to save heatmap PDF
+
+	return options
+
+def generate_odds_figure():
+	"""Generate Figure 3."""
+
+	options = set_options()
+
+	# TODO: just read files, don't rerun sim
+
+	# Load crime_data.
+	crime_data = load_predpol_data(options)
+
+	# Run without adding crimes.
+	options["baseline_crime_filename"] = "predpol/output/temp_baseline.csv"
+	options["observed_crime_filename"] = "predpol/output/temp_observed.csv"
+	options["rates_filename"] = "predpol/output/temp_rates.csv"
+	options["flagged_filename"] = "predpol/output/temp_flagged.csv"
+	options["add_crimes_logical"] = False
+	run_predpol_simulation2(crime_data, options)
+
+	# Run with adding crimes.
+	options["baseline_crime_filename"] = "predpol/output/temp_baseline_add_20percent.csv"
+	options["observed_crime_filename"] = "predpol/output/temp_observed_add_20percent.csv"
+	options["rates_filename"] = "predpol/output/temp_rates_add_20percent.csv"
+	options["flagged_filename"] = "predpol/output/temp_flagged_add_20percent.csv"
+	options["add_crimes_logical"] = True
+	run_predpol_simulation2(crime_data, options)
+
+	# Read CSV files.
+	rates_no_addl_df = pd.read_csv("predpol/output/temp_rates.csv")
+	rates_addl_df = pd.read_csv("predpol/output/temp_rates_add_20percent.csv")
+	flagged_no_addl_df = pd.read_csv("predpol/output/temp_flagged.csv")
+	flagged_addl_df = pd.read_csv("predpol/output/temp_flagged_add_20percent.csv")
+
+	# Calculate ratio of rates for flagged vs. non-flagged bins for case with no additional crimes.
+	odds_no_addl = []
+	for date in rates_no_addl_df:
+		rates_flagged_no_addl = []
+		rates_not_flagged_no_addl = []
+		for bin in rates_no_addl_df.index:
+			if flagged_no_addl_df[date][bin] == 1:
+				rates_flagged_no_addl.append(rates_no_addl_df[date][bin])
+			else:
+				rates_not_flagged_no_addl.append(rates_no_addl_df[date][bin])
+		odds_no_addl.append(np.average(rates_flagged_no_addl) / np.average(rates_not_flagged_no_addl))
+
+	# Calculate ratio of rates for flagged vs. non-flagged bins for case with additional crimes.
+	odds_addl = []
+	for date in rates_addl_df:
+		rates_flagged_addl = []
+		rates_not_flagged_addl = []
+		for bin in rates_addl_df.index:
+			if flagged_addl_df[date][bin] == 1:
+				rates_flagged_addl.append(rates_addl_df[date][bin])
+			else:
+				rates_not_flagged_addl.append(rates_addl_df[date][bin])
+		odds_addl.append(np.average(rates_flagged_addl) / np.average(rates_not_flagged_addl))
+
+	fig = plt.figure()
+	plt.plot(odds_no_addl[1:])
+	plt.plot(odds_addl[1:])
+	plt.show()
+
+	fig.savefig("figure3", bbox_inches='tight')
+
+
+def main(options):
+
+	options = set_options()
 
 	# Load crime_data.
 	crime_data = load_predpol_data(options)
@@ -593,3 +664,4 @@ def main():
 
 if __name__ == '__main__':
 	main()
+#	generate_odds_figure()
