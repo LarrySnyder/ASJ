@@ -1,3 +1,5 @@
+# The Mobile Food Bank Game
+
 "The Mobile Food Bank Game" developed based on the problem tackled in [the paper](https://arxiv.org/abs/2105.05308) by Sinclair et al. The purpose of the game is to show the students the trade-off between efficiency (minimizing waste) and fairness in the case of sequential allocation.
 
 ![game running gig](images/game.gif)
