@@ -4,13 +4,13 @@
 
 ![game running gig](images/game.gif)
 
-## About the game
+## 🧐 About the game
 
 Due to the pandemic, the Lehigh food bank set up a mobile pantry that travels to 8 different locations in the Lehigh Valley, PA. You play as the operator of the mobile pantry. At each location, you need to choose how much food (meat, pasta, and prepared meals) to give to people who show up. They can be classified based on their dietary preferences to omnivores, vegetarians, and meal-prep. For the sake of simplicity, omnivores only eat meat, vegetarians only eat pasta, and meal-prep only eat prepared meals. Therefore the amount of meat chosen will be  equally distributed and given the omnivores , and so on. Since you have limited ressources, once you leave a location (hit "Next" in the game), there is no going back and the food left at the end goes to waste, so make your choices wisely!
 
 In the first round, your are only evaluated based on the amount of food left at the end of the game. However, the second round includes a fairness score as well as satisfaction level (using <img src="images/100.png" width="20">,  <img src="images/80.png" width="20">, <img src="images/60.png" width="20">,  <img src="images/40.png" width="20"> and <img src="images/20.png" width="20">) of the visitors of each location. 
 
-##  Teaching using the game
+## 👨‍💻 Teaching using the game
 
 We suggest the following plan:
 
@@ -22,7 +22,7 @@ We suggest the following plan:
 6. Plot efficiency x-axis vs fairness y-axis scores to show the trade-off between the two
 
 
-## Requirements
+## ⚠️ Requirements
 
 * Python >= 3.8
 * Numpy
