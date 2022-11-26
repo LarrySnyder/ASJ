@@ -5,8 +5,6 @@ import numpy as np
 import operator_fp
 import button, location
 import resourcegraph
-# from sklearn.feature_extraction import image
-# from PIL import Image
 
 
 
@@ -142,6 +140,9 @@ text_rd2 = arcademedium.render('ROUND 2', True, (0, 0, 0))
 res_button = button.Button((450, 490), "images/Button_pixelart.png")
 text_res = arcademedium.render('Restart', True, (0, 0, 0))
 
+quit_button = button.Button((10, 10), "images/Button_pixelart.png", 0.4)
+text_quit = arcadefont.render('Quit', True, (0, 0, 0))
+
 
 
 
@@ -181,6 +182,8 @@ while run:
         oper.draw_resources(WIN)
         oper.draw_num_ind(WIN)
         truck.move()
+        quit_button.show(WIN)
+        WIN.blit(text_quit, (23, 20))
 
         if (isround2):
             for i in range(len(LOCATIONS)):
@@ -289,6 +292,26 @@ while run:
                         show_score = True
 
                     res.reset()
+                
+                if quit_button.clicked(event):
+                    Started = False
+                    Rounds = True
+                    not_finished = True
+                    show_score = False
+                    isround2 = False
+                    # Reset everything
+                    truck.reset()
+                    oper.reset()
+                    for loc in location_fairness:
+                        loc.reset()
+
+
+                    budget, sizes = generate_data()
+
+                    oper = operator_fp.Operator(budget, sizes, truck)
+                    res = resourcegraph.Resource([(900, 500), (980, 500), (1060, 500)], oper)
+
+
             else:
                 if (start_button.clicked(event)):
                     Rounds = True
@@ -313,6 +336,11 @@ while run:
                     oper.reset()
                     for loc in location_fairness:
                         loc.reset()
+
+                    budget, sizes = generate_data()
+
+                    oper = operator_fp.Operator(budget, sizes, truck)
+                    res = resourcegraph.Resource([(900, 500), (980, 500), (1060, 500)], oper)
 
                     
 
