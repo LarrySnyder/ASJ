@@ -46,6 +46,7 @@ Many of the Jupyter notebooks and other materials from the course are available 
 # Presentations and Articles
 
 - We gave a presentation about teaching the course at [Penn State–Berks](https://ai.psu.edu/wp-event/teaching-algorithms-and-social-justice/) in November 2023. [[slides](https://github.com/LarrySnyder/ASJ/raw/e917f069528cc584b288298430a10147ec10ca9a/presentations/PSU-Berks-Snyder-Edwards-111023.pdf)]
+- See the [article](https://thebrownandwhite.com/2023/10/10/married-professors-teach-interdisciplinary-course/) about the course in the Lehigh _Brown and White_, October 10, 2023.
 
 # Acknowlegments
 
