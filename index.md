@@ -39,6 +39,10 @@ The readings change somewhat each time we teach the course. Some of the main boo
 - John Cheney-Lippold, _We Are Data_
 - Thomas S. Mullaney, et al. (eds.), _Your Computer Is On Fire_
 
+# GitHub Repository
+
+Many of the Jupyter notebooks and other materials from the course are available on our [GitHub repo](https://github.com/LarrySnyder/ASJ). 
+
 # Acknowlegments
 
 This course was developed with partial support from a grant from the Lehigh University Humanities Lab. This support is gratefully acknowledged.
