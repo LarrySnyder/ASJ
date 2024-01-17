@@ -50,6 +50,6 @@ Many of the Jupyter notebooks and other materials from the course are available 
 
 # Acknowlegments
 
-This course was developed with partial support from a grant from the Lehigh University Humanities Lab. This support is gratefully acknowledged.
+This course was developed with partial support from a grant from the Lehigh University [Humanities Lab](https://humanitieslab.lehigh.edu/). This support is gratefully acknowledged.
 
 We also received substantial assistance from Lehigh's Center for Innovation in Teaching and Learning ([CITL](https://lts.lehigh.edu/citl)), especially [Rob Weidman](https://lts.lehigh.edu/profile/robert-weidman) and [Jeremy Mack](https://lts.lehigh.edu/profile/jeremy-mack), who built some of the digital tools we use in the course.
