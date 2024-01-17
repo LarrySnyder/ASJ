@@ -26,4 +26,19 @@ This course is taught by **Professors [Suzanne Edwards](https://english.cas.lehi
 
 # Books
 
-We've changed 
+The readings change somewhat each time we teach the course. Some of the main books we discuss are:
+
+- Meredith Broussard, _Artificial Unintelligence_
+- Ruha Benjamin, _Race After Technology_
+- Cathy O'Neil, _Weapons of Math Destruction_
+- Catherine D'Ignazio and Lauren F. Klein, _Data Feminism_
+- Safiya Umoja Noble, _Algorithms of Oppression_
+- Sarah Brayne, _Predict and Surveil_
+- Virginia Eubanks, _Automating Inequality_
+- adrienne maree brown and Walidah Imarisha (eds.), _Octavia's Brood_
+- John Cheney-Lippold, _We Are Data_
+- Thomas S. Mullaney, et al. (eds.), _Your Computer Is On Fire_
+
+# Acknowlegments
+
+This course was developed with partial support from a grant from the Lehigh University Humanities Lab. This support is gratefully acknowledged.
